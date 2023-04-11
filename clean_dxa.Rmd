@@ -1,0 +1,93 @@
+---
+title: "Clean DXA Data"
+author: "Griffin Tibbitts"
+date: '2023-03-28'
+output: html_document
+description: Cleaning the non-imputed dxa data and making sure it aligns with the framingham reference and alternate alleles
+---
+
+```{r}
+rm(list = ls())
+```
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+# Load in dxa file
+dxa = read.csv(file="/work/larylab/Mayo/data/HDAC_dxa_fit5.csv",stringsAsFactors = F)
+idxa = read.csv(file="/work/larylab/Mayo/data/imp_dxa_fit5.csv",stringsAsFactors = F)
+lookup = read.csv('/work/larylab/Griffin_Stuff/Griffin_Mayo/data/mayo_fram_snp_master_list.csv')
+```
+
+```{r}
+# Clean and assign human readable values to data from HDAC_dxa_fit5.csv 
+cleaned_dxa <- dxa %>%
+  
+  # Rename column names to be more human readable
+  rename(BMD_Site = 'dxa_var', 'SNP'='snp') %>%
+  
+  # Create new column for the variant nucleotide
+  mutate(REF = sub(".*_", '', SNP), .after = SNP,
+         ALT = NA) %>%
+  
+  # Remove nucleotide from the SNP ID to standardize them for grouping
+  mutate(SNP = sub("_.*", "", SNP)) %>%
+  
+  # Remove GSA. from the rsIDs it shows up in
+  mutate(SNP = sub(".*GSA.", "", SNP)) %>%
+  
+  # Renaming BMD Sites to be more descriptive
+  mutate(BMD_Site = recode(BMD_Site, bodybmd = 'Total Body', fnbmd = 'Femoral Neck',
+                           fhipbmd = 'Femoral Hip', sl1l4bmd = 'Lumbar Spine', 
+                           drubmd = 'Ultradistal Radius', dradbmd = 'Distal Radius')) %>%
+  
+  # Merge with lookup file
+  merge(lookup, by.x = 'SNP', by.y = 'rsid', all = T) %>%
+  filter(!is.na(BMD_Site)) %>%
+  distinct() %>%
+  select(-written.allele, -A1, -A2, -rsid.allele) %>%
+  
+  # Remove lookup chr number from ch38 position
+  mutate(ch38 = sub('.*:','',ch38)) %>%
+  
+  # Label with source
+  mutate(Source = 'dxa')
+```
+
+```{r}
+# big cleaning and human readable name assignment for the imputed data
+cleaned_imp <- idxa %>%
+
+    # Rename column names to be more human readable
+    rename(BMD_Site = 'dxa_var', 'SNP'='snp') %>%
+  
+    # Renaming BMD Sites to be more descriptive
+    mutate(BMD_Site = recode(BMD_Site, bodybmd = 'Total Body', fnbmd = 'Femoral Neck',
+                           fhipbmd = 'Femoral Hip', sl1l4bmd = 'Lumbar Spine', 
+                           drubmd = 'Ultradistal Radius', dradbmd = 'Distal Radius')) %>%
+  
+  # Fix SNP name 
+   mutate(ch38 = paste0(sub("\\..*",'',SNP), ':', gsub("^.+?\\.(.+?)\\..*$", "\\1", SNP))) %>%
+  
+  # Merge with lookup
+  merge(lookup, by = 'ch38', all = T) %>%
+  filter(!is.na(BMD_Site)) %>%
+  distinct() %>%
+  select(-written.allele, -rsid.allele) %>%
+  rename(REF = A2, ALT = A1) %>%
+  
+  # Remove old SNP column, rename rsid to SNP
+  select(-SNP) %>%
+  rename(SNP = rsid) %>%
+  
+  # Add source label
+  mutate(Source = 'Imputed')
+```
+
+```{r}
+write.csv(cleaned_dxa,'/work/larylab/Griffin_Stuff/Griffin_Mayo/data/cleaned_dxa.csv')
+write.csv(cleaned_imp,'/work/larylab/Griffin_Stuff/Griffin_Mayo/data/cleaned_imputed_dxa.csv')
+```
+
