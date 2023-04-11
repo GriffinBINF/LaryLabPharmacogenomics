@@ -1,0 +1,79 @@
+---
+title: "Build Genotype File"
+author: "Griffin Tibbitts"
+date: '2023-04-10'
+output: html_document
+acknowledgement: Adapted from code written by K. Nevola and C. Lary
+---
+
+```{r}
+rm(list = ls())
+library(dplyr)
+library(tidyverse)
+```
+
+```{r}
+FN_Pheno <- read.csv('/work/larylab/Griffin_Stuff/Griffin_Framingham/data/Femoral_Neck_Pheno_Data.csv')
+LS_Pheno <- read.csv('/work/larylab/Griffin_Stuff/Griffin_Framingham/data/Lumbar_Spine_Pheno_Data.csv')
+
+
+# Filtered genotype files created from workflow described by K. Nevola
+genotype_files<- list.files(path = '/work/larylab/Griffin_Stuff/Griffin_Framingham/data/TargetGenes', 
+                            pattern = "_filtered_genotype.RData")
+
+# Create single data frame with snps labeled by gene
+# SNP position is given for the Ch37 human genome build
+setwd('/work/larylab/Griffin_Stuff/Griffin_Framingham/data/TargetGenes')
+df <- NULL
+for (i in genotype_files){
+  print(i)
+  load(i)
+  gene <- merge(tidy$gt, tidy$fix, by = "POS")
+  gene$Gene <- gsub(x = i, pattern = "_vcfr_tidy_filtered_genotype.RData",replacement ="")
+  df <- rbind(df,gene)
+}
+
+# IMPORTANT
+# Lumbar spine was not found to be significant for any snps
+# To reduce data size, only the femoral neck data will be run here
+# To run for LS data, simply replace FN_Pheno with LS_Pheno below
+all_genes_pheno <- merge(df, FN_Pheno, by.x = "Indiv", by.y = "shareid")
+```
+
+```{r}
+# Check data parameters
+# Number of unique SNPs (820)
+length(unique(all_genes_pheno$POS)) 
+
+# Number of people in genotype table (7082)
+length(unique(df$Indiv)) 
+
+# Number of People in merged table (1642)
+length(unique(all_genes_pheno$Indiv)) 
+```
+
+```{r}
+# Nest data
+pheno_snp <- within(all_genes_pheno, Genotype <- relevel(Genotype, ref = "normal"))
+pheno_snp_pos<- pheno_snp %>% group_by(.,POS,Gene) %>% nest()
+```
+
+```{r}
+save(pheno_snp_pos, file = "/work/larylab/Griffin_Stuff/Griffin_Framingham/data/CandidateGenes.RData")
+```
+
+```{r}
+# look at counts/Table 1 for longitudinal cohort OLD COUNTS
+sample_data <- pheno_snp_pos$data[[1]] # 1642 obs. of 25 variables
+
+sample_data_check <- sample_data %>%
+  filter(!is.na(FNperyear)) %>% # 1642
+  filter(SEX=="Female") %>% # 927
+  filter(!is.na(BB6)) %>% # 927
+  filter(!is.na(EST6)) %>% # 927
+  filter(!is.na(BMI6)) %>% # 927
+  filter(!is.na(SEX)) %>% # 927
+  filter(!is.na(AGE6)) %>% # 927
+  filter(!is.na(HGT6)) # 927
+```
+
