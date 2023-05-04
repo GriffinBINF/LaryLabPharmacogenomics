@@ -1,6 +1,6 @@
-#Mayo Pharmacogenomics Workflow
+# Mayo Pharmacogenomics Workflow
 
-##Required Files
+## Required Files
 
 **Framingham Phenotype Files**
 
@@ -28,7 +28,7 @@ Pedigree - share\_ped\_052517.csv
 
 SNP Annotation Master List – mayo\_fram\_snp\_master\_list.csv
 
-##Mayo
+## Mayo
 
 1. Clean Mayo Results
   1. clean\_lab.Rmd, clean\_dxa.Rmd – DXA BMD and Serum lab results consist of imputed and non-imputed tables of slightly different formats. These two scripts repackage that data and assign consistent naming, position, and other identifying variables to SNPs.
@@ -42,7 +42,7 @@ SNP Annotation Master List – mayo\_fram\_snp\_master\_list.csv
 
 **Output: all\_mayo\_BMD.csv, all\_mayo\_LAB.csv, all\_mayo\_SNPs.csv**
 
-##Framingham
+## Framingham
 
 1. Follow K. Nevola's Workflow - (Code adapted into Rmarkdown files and to run on Discovery)
   1. WellImputedSNPs.Rmd – Create a list of SNPs that meet the imputation threshold (modified for Discovery server)
@@ -71,7 +71,7 @@ SNP Annotation Master List – mayo\_fram\_snp\_master\_list.csv
 1. Run relational matrix LMER
   1. run\_lmer.Rmd – Fit LMER model for longitudinal or cross-sectional data.
 
-##Plotting and Visualization
+## Plotting and Visualization
 
 1. Merge Mayo with Framingham, make Flextables.
   1. build\_merged\_mayo\_fram\_tables.Rmd – Rework Framingham headers to match mayo, merge results, create tables of significant results as .csv and .docx flextable.
