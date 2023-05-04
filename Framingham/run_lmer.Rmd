@@ -1,0 +1,146 @@
+---
+title: "Run LMER"
+author: "Griffin Tibbitts"
+date: '2023-04-13'
+output: html_document
+---
+
+```{r}
+rm(list = ls())
+```
+
+```{r}
+library(tidyverse)
+library(dplyr)
+library(emmeans)
+library(lme4qtl)
+library(kinship2)
+library(coxme)
+library(emmeans)
+library(lmerTest)
+```
+
+```{r}
+pedigree1 <- read.csv("/work/larylab/Griffin_Stuff/Griffin_Framingham/data/share_ped_052517.csv")
+
+# Load this for longitudinal data
+load("/work/larylab/Griffin_Stuff/Griffin_Framingham/data/CandidateGenes.RData")
+
+# Load this for cross sectional data
+#load("/work/larylab/Griffin_Stuff/Griffin_Framingham/data/Cross_Sectional_CandidateGenes.RData")
+```
+
+```{r}
+data<-pheno_snp_pos %>% unnest(., cols = c(data))
+missing_id <- as.numeric(setdiff(data$Indiv, pedigree1$shareid))
+data1 <- pheno_snp_pos$data[[1]]
+missing_sex <- data1$SEX[data1$Indiv %in% missing_id]
+missing_sex[missing_sex == "Female"] <- 2
+missing_sex[missing_sex == "Male"] <- 1
+missing_sex <- as.numeric(missing_sex)
+
+# This line can be troublesome. If you get an error, update the pedno parameter
+# to be equal to 1600:16[second row minus 1]
+missing_ped <- data.frame(pedno = 1600:1678, shareid = missing_id, fshare = NA, mshare = NA, sex = missing_sex, itwin = NA)
+ped_all <- rbind(pedigree1, missing_ped)
+ped<-with(ped_all, pedigree(id = shareid, fshare, mshare, sex=sex, famid=pedno))
+kmat <- kinship(ped)
+
+kmat1<-as.matrix(kmat)
+ids <- colnames(kmat1) %in% data1$Indiv
+pheno_kmat <- kmat1[ids,ids]
+
+data<-pheno_snp_pos %>% unnest(., cols = c(data))
+data_fem <- data %>% filter(., SEX == 'Female')
+
+female_ids <- colnames(kmat1) %in% data_fem$Indiv
+female_kmat <- kmat1[female_ids,female_ids]
+
+
+#  Are there any Identical twins? ####
+pheno_pedigree <- ped_all[ped_all$shareid %in% data1$Indiv,]
+twins <- pheno_pedigree[is.na(pheno_pedigree$itwin)== F,] # Yes there are 8 individuals with the itwin marker TRUE
+
+relevant_snp_nest <- data_fem %>% filter(., Gene %in% c("ADRB2", "ADRB1", "HDAC4")) %>% group_by(., POS, Gene) %>% nest()
+```
+
+```{r}
+# Get fixed effects as a data frame
+# add p-value column
+# add columns for emmeans
+
+# For cross sectional data, instances of 'BB6' will have to be changed to 'BB'
+results_to_df <- function(lmer_result, index){
+  effects <- as.data.frame(summary(lmer_result)$coefficients)  %>%
+    rename(t = 't value') %>%
+    rownames_to_column('var') %>%
+    filter(var == 'round(gt_DS):BB6Yes') %>%
+    mutate(p = (2 * pt(abs(t), 927, lower.tail = F)),
+           POS = relevant_snp_nest$POS[[index]],
+           Gene = relevant_snp_nest$Gene[[index]],
+           ALT = relevant_snp_nest$data[[index]]$ALT[[1]]) 
+  
+  allele_0_means <- as.data.frame(emmeans(lmer_result, pairwise ~ BB6*round(gt_DS), at = list(gt_DS = 0))) %>%
+    mutate(POS = relevant_snp_nest$POS[[index]]) %>%
+    rename(Allele = gt_DS) %>%
+    filter(BB6 == 'Yes' | BB6 == 'No') %>%
+    select(POS, BB6, Allele, emmean, SE, lower.CL, upper.CL)
+  
+  allele_1_means <- as.data.frame(emmeans(lmer_result, pairwise ~ BB6*round(gt_DS), at = list(gt_DS = 1))) %>%
+    mutate(POS = relevant_snp_nest$POS[[index]]) %>%
+    rename(Allele = gt_DS) %>%
+    filter(BB6 == 'Yes' | BB6 == 'No') %>%
+    select(POS, BB6, Allele, emmean, SE, lower.CL, upper.CL)
+    
+  allele_2_means <- as.data.frame(emmeans(lmer_result, pairwise ~ BB6*round(gt_DS), at = list(gt_DS = 2))) %>%
+    mutate(POS = relevant_snp_nest$POS[[index]]) %>%
+    rename(Allele = gt_DS) %>%
+    filter(BB6 == 'Yes' | BB6 == 'No') %>%
+    select(POS, BB6, Allele, emmean, SE, lower.CL, upper.CL)
+  
+  pred_means <- rbind(allele_0_means, allele_1_means, allele_2_means)
+  
+  table_out <- merge(effects, pred_means, by = 'POS')
+    
+    return(table_out)
+
+}
+
+results_lmer <- function(data, kmat, cov){
+  results <- NULL
+  for (i in 1:length(data$POS)){
+    print(i)
+    x <- Sys.time()
+    # gt_DS = genotype variable (should be 0, 1, or 2 - imperfect imputation could lead to values in between)
+    # FNperyear assumes working with femoral neck, for LS make sure to change
+    lmer1 <- relmatLmer(formula = as.formula(paste0("FNperyear~round(gt_DS)*BB6 +", cov, '+ (1| Indiv)')), 
+                       data = data$data[[i]], relmat = list(Indiv = female_kmat))
+    new_results <- results_to_df(lmer1, i)
+    results <- rbind(results, new_results)
+    y<-Sys.time()
+    print(y-x)
+  }
+  return(results)
+}
+```
+
+```{r}
+options(warn=-1)
+#Longitudinal Model
+lmer_model <- results_lmer(data = relevant_snp_nest, kmat = female_kmat, cov = "AGE6 + HGT6 + BMI6 + EST6 + f6_7nbmd")
+
+# Cross sectional model
+# lmer_model <- results_lmer(data = relevant_snp_nest, kmat = female_kmat, cov = "AGE8 + HGT8 + BMI8 + EST8")
+```
+
+```{r}
+relevant_snps_results <- lmer_model %>%
+  select(-emmean, -SE, -BB6, -Allele, -lower.CL, -upper.CL) %>%
+  distinct()
+
+relevant_snps_emmeans <- lmer_model %>%
+  select(-var, -Estimate, -'Std. Error', -t, -p)
+
+write.csv(relevant_snps_results, '/work/larylab/Griffin_Stuff/Griffin_Framingham/results/AllSNPs_LMER_results_female.csv')
+write.csv(relevant_snps_emmeans, '/work/larylab/Griffin_Stuff/Griffin_Framingham/results/cs_AllSNPs_LMER_emmeans_female.csv')
+```
