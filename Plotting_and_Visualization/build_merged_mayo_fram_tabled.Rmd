@@ -1,0 +1,213 @@
+---
+title: "Merge Mayo and Framingham"
+author: "Griffin Tibbitts"
+date: '2023-05-02'
+output: html_document
+---
+
+```{r}
+rm(list = ls())
+```
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(stringr)
+library(flextable)
+library(officer)
+```
+
+```{r}
+# Load Files 
+# Merged mayo files from merge_mayo_data_idSNPs.Rmd
+mayo_BMD <- read.csv('/work/larylab/Griffin_Stuff/Griffin_Mayo/data/all_mayo_BMD.csv')
+mayo_LAB <- read.csv('/work/larylab/Griffin_Stuff/Griffin_Mayo/data/all_mayo_LAB.csv')
+
+# Longitudinal and Cross-Sectional Results from runLMER.Rmd
+longitudinal_results <- read.csv('/work/larylab/Griffin_Stuff/Griffin_Framingham/results/AllSNPs_LMER_results_female.csv')
+cross_sectional_results <- read.csv('/work/larylab/Griffin_Stuff/Griffin_Framingham/results/cs_AllSNPs_LMER_results_female.csv')
+
+# Manually built SNP annotation master list (position, chromosome, ref and alt alleles etc.)
+master_list <- read.csv('/work/larylab/Griffin_Stuff/Griffin_Mayo/data/mayo_fram_snp_master_list.csv')
+
+# Geno-pheno file, used to obtain reference and alternate alleles
+load('/work/larylab/Griffin_Stuff/Griffin_Framingham/data/CandidateGenes.RData')
+```
+
+```{r}
+# Get the reference and alternate alleles for each snp from the original geno-pheno file
+merge_mayo_and_framingham <- function(result, mayo, genotype, study, n) {
+  mayo1 <- mayo %>%
+  distinct() %>%
+  mutate(MRef = ch38.reference.allele,
+         MAlt = ch38.alternate.allele,
+         MAlt = case_when(MAlt == '' ~ NA,
+                          TRUE ~ MAlt)) %>%
+  rename(POS = ch37) %>%
+  select(rsid, POS, ch38, MRef, MAlt) %>%
+  mutate(POS = as.numeric(POS))
+  
+  # Get the reference and alternate alleles from the original genotype file
+  alleles <- unnest(genotype, cols = c(data)) %>%
+    select(POS, REF, ALT) %>%
+    rename(FRef = REF, FAlt = ALT) %>%
+    distinct()
+
+  # Merge the alleles with the results data
+  relevant_merged <-merge(alleles, result, by = 'POS') %>%
+    rename(Gene = Gene.x) %>%
+    select(-`Gene.y`) %>%
+    mutate(POS = as.numeric(POS)) %>%
+    distinct() 
+
+    # Merge with the lookup file
+  merge_with_mayo <- merge(relevant_merged, mayo1, by = 'POS', all.x = T) %>%
+  
+  # Remove duplicate entries (some happen)
+  distinct() %>%
+  
+  #Remove unnecessary lookup values
+  select(-any_of(c('X.1', 'X.2', 'X')), -MRef, -MAlt) %>%
+  rename(ch37 = POS, Allele = ALT, SNP = rsid, Value = Estimate, Std.Error = Std..Error) %>%
+  filter(!is.na(SNP)) %>%
+  mutate(Chromosome = case_when(Gene == 'ADRB1' ~ 10,
+                                Gene == 'ADRB2' ~ 5,
+                                Gene == 'HDAC4' ~ 2),
+         N = n) %>%
+    
+  # Label with source, drug column and BMD_Site column
+  mutate(Source = study, Drug = "Any BB (Framingham)", BMD_Site = 'Femoral Neck') %>%
+  
+  select(N, SNP, Chromosome, Gene, ch37, Drug, BMD_Site, Value, Std.Error, p, Source, Allele)
+}
+```
+
+```{r}
+longitudinal_results_in_mayo_format <- merge_mayo_and_framingham(longitudinal_results, master_list, pheno_snp_pos, 'Longitudinal', 927) 
+cross_sectional_results_in_mayo_format <- merge_mayo_and_framingham(cross_sectional_results, master_list, pheno_snp_pos, 'Cross-Sectional', 806) 
+
+# Merge mayo and longitudinal framingham
+all_BMD <- rbind(select(mayo_BMD, -X), longitudinal_results_in_mayo_format)
+```
+```{r}
+# Now that the imputed and non-imputed data from Mayo is aligned,
+# it needs one more sign change to ensure that the counted alleles are the same
+# as Framingham. 
+# The Mayo data set is counting the number of reference alleles
+# whereas Framingham is counting alternate alleles. Flipping the sign for Mayo
+# gives the effect estimate of the change for each copy of the alternate allele.
+
+aligned_mayo_and_framingham_dxa <- all_BMD %>%
+  mutate(Value = case_when(Source == 'dxa' | Source == 'Imputed' ~ Value * -1,
+                           TRUE ~ Value)) %>%
+  mutate(Value = round(Value, 3), Std.Error = round(Std.Error, 3), p = round(p,6)) %>%
+  select(N, SNP, ch37, Chromosome, Gene, Allele, one_of('BMD_Site', 'Lab'), Drug, Value, Std.Error, p, Source)
+aligned_mayo_and_framingham_dxa <-  aligned_mayo_and_framingham_dxa[!duplicated(aligned_mayo_and_framingham_dxa[c('ch37', 'Drug', 'BMD_Site')]),]
+
+aligned_mayo_and_framingham_lab <- mayo_LAB %>%
+  mutate(Value = case_when(Source == 'dxa' | Source == 'Imputed' ~ Value * -1,
+                           TRUE ~ Value)) %>%
+  mutate(Value = round(Value, 3), Std.Error = round(Std.Error, 3), p = round(p,6)) %>%
+  select(N, SNP, ch37, Chromosome, Gene, Allele, one_of('BMD_Site', 'Lab'), Drug, Value, Std.Error, p, Source) 
+
+aligned_mayo_and_framingham_lab <- aligned_mayo_and_framingham_lab[!duplicated(aligned_mayo_and_framingham_lab[c('ch37', 'Drug', 'Lab')]),]
+```
+```{r}
+# Create Separate Tables
+# Create versions filtered for significance
+filtered_dxa_data <- aligned_mayo_and_framingham_dxa %>%
+  filter(p < 0.05)
+filtered_lab_data <- aligned_mayo_and_framingham_lab %>%
+  filter(p < 0.05)
+
+# Create tables of data separated by BMD site
+lumbar_spine <- aligned_mayo_and_framingham_dxa %>%
+  filter(BMD_Site == 'Lumbar Spine')
+femoral_neck <- aligned_mayo_and_framingham_dxa %>%
+  filter(BMD_Site == 'Femoral Neck')
+ultradistal_radius <- aligned_mayo_and_framingham_dxa %>%
+  filter(BMD_Site == 'Ultradistal Radius')
+femoral_hip <- aligned_mayo_and_framingham_dxa %>%
+  filter(BMD_Site == 'Femoral Hip')
+total_body <- aligned_mayo_and_framingham_dxa %>%
+  filter(BMD_Site == 'Total Body')
+
+# Data frames for each of the lab results
+trap5b <- aligned_mayo_and_framingham_lab %>%
+  filter(Lab == 'trap5b')
+opg <- aligned_mayo_and_framingham_lab %>%
+  filter(Lab == 'opg')
+rankl <- aligned_mayo_and_framingham_lab %>%
+  filter(Lab == 'rankl')
+filtered_ctx <- filtered_lab_data %>%
+  filter(Lab == 'ctx')
+ctx <- aligned_mayo_and_framingham_lab %>%
+  filter(Lab == 'ctx')
+osteopontin <- aligned_mayo_and_framingham_lab %>%
+  filter(Lab == 'osteopontin')
+p1np <- aligned_mayo_and_framingham_lab %>%
+  filter(Lab == 'p1np')
+ocn <- aligned_mayo_and_framingham_lab %>%
+  filter(Lab == 'ocn')
+
+```
+
+```{r}
+# Save tables as Flextables
+tmp_ctx <- ctx %>% rename(Sample = Lab)
+tmp_filtered_ctx <- filtered_ctx %>% rename(Sample = Lab)
+tmp_dxa <- aligned_mayo_and_framingham_dxa %>% rename(Sample = BMD_Site)
+tmp_filtered_dxa <- filtered_dxa_data %>% rename(Sample = BMD_Site)
+tmp_cs <- cross_sectional_results_in_mayo_format %>% rename(Sample = BMD_Site)
+tmp_filtered_cs <- filter(cross_sectional_results_in_mayo_format, p < 0.05) %>% rename(Sample = BMD_Site)
+
+all_dxa_plus_ctx_flex <- rbind(tmp_dxa, tmp_ctx, tmp_cs) %>%
+  select(SNP, Chromosome, ch37, Gene, Allele, N, Sample, Drug, Value, Std.Error, p, Source) %>%
+  arrange(Gene, ch37) %>%
+  filter(!is.na(N)) 
+
+filtered_dxa_plus_ctx_flex <- rbind(tmp_filtered_dxa, tmp_filtered_ctx, tmp_filtered_cs) %>%
+  select(SNP, Chromosome, ch37, Gene, Allele, N, Sample, Drug, Value, Std.Error, p, Source) %>%
+  arrange(Gene, ch37) %>%
+  filter(!is.na(N)) 
+
+cross_sectional_flex <- cross_sectional_results_in_mayo_format %>%
+  mutate(Value = round(Value,3),
+         Std.Error = round(Std.Error,3),
+         p = round(p, 6)) %>%
+  rename(Sample = BMD_Site) %>%
+  select(SNP, Chromosome, ch37, Gene, Allele, N, Sample, Drug, Value, Std.Error, p) %>%
+  arrange(Gene, ch37) 
+```
+
+```{r}
+# Save key tables as .csv (used in effect estimate plot)
+write.csv(all_dxa_plus_ctx_flex, '/work/larylab/Griffin_Stuff/Griffin_Mayo/results/tables/all_dxa_ctx_flex.csv')
+write.csv(filtered_dxa_plus_ctx_flex, '/work/larylab/Griffin_Stuff/Griffin_Mayo/results/tables/filtered_dxa_plus_ctx_flex.csv')
+write.csv(cross_sectional_flex, '/work/larylab/Griffin_Stuff/Griffin_Mayo/results/tables/cross_sectional_flex.csv')
+```
+
+```{r}
+# Save as Flextables in docx
+sect_properties <- prop_section(
+  page_size = page_size(
+    orient = "landscape",
+    width = 8.3, height = 11.7
+  ),
+  type = "continuous",
+  page_margins = page_mar()
+)
+
+save_as_docx('All BMD Results Plus ctx' = flextable(all_dxa_plus_ctx_flex), 
+             path = '/work/larylab/Griffin_Stuff/Griffin_Mayo/results/tables/all_dxa_plus_ctx.docx',
+             pr_section = sect_properties)
+
+save_as_docx('Significant BMD Results Plus ctx' = flextable(filtered_dxa_plus_ctx_flex), 
+             path = '/work/larylab/Griffin_Stuff/Griffin_Mayo/results/tables/filtered_dxa_plus_ctx_flex.docx',
+             pr_section = sect_properties)
+
+save_as_docx('Cross Sectional Framingham Hits for Mayo SNPs' = flextable(cross_sectional_flex), 
+             path = '/work/larylab/Griffin_Stuff/Griffin_Mayo/results/tables/cross_sectional_flex.docx',
+             pr_section = sect_properties)
+```
+
