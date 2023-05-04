@@ -1,0 +1,87 @@
+---
+title: "clean_lab.Rmd"
+author: "Griffin Tibbitts"
+date: '2023-04-07'
+output: html_document
+---
+
+```{r}
+rm(list = ls())
+```
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+# Load in lab file
+lab = read.csv(file="/work/larylab/Mayo/data/HDAC_lab_fit5.csv",stringsAsFactors = F)
+ilab = read.csv(file="/work/larylab/Mayo/data/imp_lab_fit5.csv",stringsAsFactors = F)
+lookup = read.csv('/work/larylab/Griffin_Stuff/Griffin_Mayo/data/mayo_fram_snp_master_list.csv')
+```
+
+```{r}
+# Clean and assign human readable values to data from HDAC_dxa_fit5.csv 
+cleaned_lab <- lab %>%
+  
+  # Rename column names to be more human readable
+  rename(Lab = 'lab_var', 'SNP'='snp') %>%
+  
+  # Create new column for the variant nucleotide
+  mutate(REF = sub(".*_", '', SNP), .after = SNP,
+         ALT = NA) %>%
+  
+  # Remove nucleotide from the SNP ID to standardize them for grouping
+  mutate(SNP = sub("_.*", "", SNP)) %>%
+  
+  # Remove GSA. from the rsIDs it shows up in
+  mutate(SNP = sub(".*GSA.", "", SNP)) %>%
+  
+  # Merge with lookup file
+  merge(lookup, by.x = 'SNP', by.y = 'rsid', all = T) %>%
+  filter(!is.na(Lab)) %>%
+  distinct() %>%
+  select(-written.allele, -A1, -A2, -rsid.allele) %>%
+  
+  # Remove lookup chr number from ch38 position
+  mutate(ch38 = sub('.*:','',ch38)) %>%
+  
+  # Label with source
+  mutate(Source = 'lab')
+
+cleaned_lab
+```
+
+```{r}
+# Imputed Lab Data
+cleaned_imp <- ilab %>%
+  
+    # Rename column names to be more human readable
+    rename(Lab = 'lab_var', 'SNP'='snp') %>%
+  
+  # Fix SNP name 
+   mutate(ch38 = paste0(sub("\\..*",'',SNP), ':', gsub("^.+?\\.(.+?)\\..*$", "\\1", SNP))) %>%
+  
+  # Merge with lookup
+  merge(lookup, by = 'ch38', all = T) %>%
+  filter(!is.na(Lab)) %>%
+  distinct() %>%
+  select(-written.allele, -rsid.allele) %>%
+  rename(REF = A2, ALT = A1) %>%
+  
+  # Remove old SNP column, rename rsid to SNP
+  select(-SNP) %>%
+  rename(SNP = rsid) %>%
+  
+  # Add source label
+  mutate(Source = 'Imputed')
+  
+  
+cleaned_imp
+```
+
+```{r}
+write.csv(cleaned_lab,'/work/larylab/Griffin_Stuff/Griffin_Mayo/data/cleaned_lab.csv')
+write.csv(cleaned_imp,'/work/larylab/Griffin_Stuff/Griffin_Mayo/data/cleaned_imputed_lab.csv')
+```
+
