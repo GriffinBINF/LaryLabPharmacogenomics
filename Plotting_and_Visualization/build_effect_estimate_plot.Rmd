@@ -1,0 +1,76 @@
+---
+title: "Plot Effect Estimates"
+author: "Griffin Tibbitts"
+date: '2023-05-02'
+output: html_document
+---
+
+```{r}
+rm(list = ls())
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+```
+
+```{r}
+# Load files (from build_merged_mayo_fram_tables.R)
+# For this study, we are plotting the significant (p < 0.05) BMD and CTX effects
+# from Mayo and Longitudinal Framingham. For other plots, save and load one of 
+# the other tables generated in the above script.
+
+filtered_dxa_data <- read.csv('/work/larylab/Griffin_Stuff/Griffin_Mayo/results/tables/filtered_dxa_plus_ctx_flex.csv')
+```
+
+```{r}
+# CTX results are from blood serum and are around -20% which squeezes the scale
+# for the BMD data. Therefore CTX values are adjusted by a factor of 10. 
+# Also remove cross-sectional data.
+adjusted_dxa_plus_ctx <- filtered_dxa_data %>%
+  filter(!Source == 'Framingham Cross Sectional') %>%
+  mutate(Value = case_when(Sample == 'ctx' ~ Value / 10,
+                           TRUE ~ Value)) %>%
+  mutate(Sample = case_when(Sample == 'ctx' ~ 'ctx / 10',
+                            TRUE ~ Sample),
+         Std.Error = case_when(Sample == 'ctx' ~ Std.Error / 10,
+                               TRUE ~ Std.Error)) %>%
+  filter(Source != 'Cross-Sectional')
+```
+
+```{r}
+# Create a plot showing the effect estimate as a percentage for each SNP
+# for each drug, at each site/lab type, grouped by gene.
+make_plots_by_gene <- function(df_in, data_type, data_title){
+
+  out_plot <- df_in %>% ggplot(aes(x=as.character(ch37), y=as.numeric(Value))) +
+    geom_hline(yintercept = 0, linetype = 'dashed') +
+    geom_point(aes(color = Drug, shape = data_type), size = 3) +  
+    facet_grid(~Gene, scales = "free_x", space = 'free_x', switch = 'both') +
+    labs(title = paste0(data_title, 'Pharmacogenetic Effect of SNP plus Beta Blocker vs Placebo'),
+       x = 'SNP Position', 
+       y = "Percent Change Per Year") +
+    scale_color_manual(values = c('Atenolol' = 'light blue', 'Nebivolol' = 'blue', 'Propranolol40' = 'light green', 'Propranolol80' = 'dark green', 
+                                'Any BB (Framingham)' = 'purple')) +
+      scale_y_continuous(labels = scales::percent) +
+    #theme_classic(base_family = "Roboto Condensed") +
+    theme(
+      plot.margin = margin(0.5, 0.5, 0.5, 0.5, unit = "cm"),
+      plot.title = element_text(size = 12, face = 'bold'),
+      strip.text.x = element_text(face = "bold"),
+      strip.placement = "outside",
+      strip.background = element_blank(),
+      axis.text.x = element_text(angle = 90, size = 8, vjust = .5),
+      legend.key.size = unit(.15, 'cm'),
+      legend.title = element_text(face = 'bold'))
+  
+  ggsave(paste0(data_title, '_plot.png'),
+    plot = out_plot,
+    device = png,
+    path = '/work/larylab/Griffin_Stuff/Griffin_Mayo/results/plots/effects_plots/')
+}
+
+# Plot all significant BMD results
+make_plots_by_gene(adjusted_dxa_plus_ctx, adjusted_dxa_plus_ctx$Sample, 'All Significant BMD Plus CTX\n')
+```
+
