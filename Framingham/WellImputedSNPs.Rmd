@@ -1,0 +1,62 @@
+---
+title: "WellImputedSNPs.Rmd"
+author: "Griffin T"
+date: "3/7/2023"
+output: html_document
+---
+```{r}
+rm(list = ls())
+```
+
+```{r}
+library(utils)
+library(GEOquery)
+library(tidyr)
+library(dplyr)
+library(utils)
+```
+
+```{r}
+# Load paths
+main_path <- '/work/larylab/Griffin_Stuff/Griffin_Framingham/'
+path_to_snps <- '/work/larylab/dbgap/data3/phg000835.v5.FHS_SHARE_imputed_HRC1.marker-info.MULTI/'
+
+# Load files
+files <- list.files(path = path_to_snps, pattern = "*.gz")
+files <- paste(path_to_snps, files, sep = "")
+for (i in 2:length(files)){
+  print(files[[i]])
+  gunzip(filename = files[i], overwrite = T, remove = F)
+}
+
+info_files <- list.files(path = path_to_snps,
+                         pattern = "*.info$")
+info_files <- paste(path = path_to_snps, info_files, sep = '')
+```
+
+```{r}
+# Filter that meet imputation threshold
+filtered_chromosomes <- list()
+for(i in 1:length(info_files)) {
+  
+  chrs <- read.table(info_files[i], header = T)
+  chrs8 <- chrs[chrs$Rsq > 0.8,]
+  chrs8 <- separate(data=chrs8, col = SNP, into = c("CHR", "POS"), sep = ":")
+  chrs8$CHR <- as.numeric(chrs8$CHR)
+  chrs8$POS <- as.numeric(chrs8$POS)
+  chrs8pos <- chrs8[1:2]
+  filtered_chromosomes[[i]] <- chrs8
+}
+chrs8 <- bind_rows(filtered_chromosomes, .id = NULL)
+write.csv(chrs8, "/work/larylab/Griffin_Stuff/Griffin_Framingham/results/WellImputedSNPs08.csv", quote = F, row.names = F)
+```
+
+```{r}
+vcfgzfiles<- list.files(path = "/work/larylab/dbgap/data3/phg000835.v4.FHS_SHARE_imputed_HRC1.genotype-calls-vcf.c1/",pattern = ".vcf.gz")
+
+fileConn <- file("gzfile.txt")    
+writeLines(vcfgzfiles, fileConn)    
+
+unique(chrs8pos$CHR)
+```
+
