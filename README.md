@@ -45,7 +45,7 @@ SNP Annotation Master List – mayo\_fram\_snp\_master\_list.csv
 ## Framingham
 
 1. Follow K. Nevola's Workflow - (Code adapted into Rmarkdown files and to run on Discovery)
-  1. WellImputedSNPs.Rmd – Create a list of SNPs that meet the imputation threshold (modified for Discovery server)
+  1. WellImputedSNPs.R – Create a list of SNPs that meet the imputation threshold (modified for Discovery server)
 
 **Output: WellImputedSNPs.txt**
 
