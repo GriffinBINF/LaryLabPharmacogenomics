@@ -76,8 +76,9 @@ results_to_df <- function(lmer_result, index){
   effects <- as.data.frame(summary(lmer_result)$coefficients)  %>%
     rename(t = 't value') %>%
     rownames_to_column('var') %>%
-    filter(var == 'round(gt_DS):BBYes') %>%
-    # The sample size for the cross sectional data is 841 so the df will be 840
+    #filter(var == 'round(gt_DS):BBYes') %>%
+    
+    # Manually calculate p value from t statistic
     mutate(p = (2 * pt(abs(t), 840, lower.tail = F)),
            POS = relevant_snp_nest$POS[[index]],
            Gene = relevant_snp_nest$Gene[[index]],
@@ -129,6 +130,7 @@ results_lmer <- function(data, kmat, cov){
 
 ```{r}
 # Cross sectional model
+options(warn=-1)
 lmer_model <- results_lmer(data = relevant_snp_nest, kmat = female_kmat, cov = "AGE8 + HGT8 + BMI8 + EST8")
 ```
 
@@ -138,8 +140,14 @@ relevant_snps_results <- lmer_model %>%
   distinct()
 
 relevant_snps_emmeans <- lmer_model %>%
+  filter(var == 'round(gt_DS):BBYes')%>%
   select(-var, -Estimate, -'Std. Error', -t, -p)
 
 write.csv(relevant_snps_results, '/work/larylab/Griffin_Stuff/Griffin_Framingham/results/FULL_POWER_CS_FN_AllSNPs_LMER_results_female.csv')
 write.csv(relevant_snps_emmeans, '/work/larylab/Griffin_Stuff/Griffin_Framingham/results/FULL_POWER_CS_FN_AllSNPs_LMER_emmeans_female.csv')
+```
+
+```{r}
+head(relevant_snps_results)
+head(relevant_snps_emmeans)
 ```
