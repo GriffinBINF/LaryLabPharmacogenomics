@@ -5,22 +5,20 @@ date: '2023-05-04'
 output: html_document
 ---
 
----
-title: "extract vcf ktn"
-author: "Griffin T"
-date: "3/12/2023"
-output: html_document
----
+```{r}
+rm(list = ls())
+```
 
 ```{r}
 library(vcfR)
 library(R.utils)
-target_files<-list.files(path = '/work/larylab/Griffin_Stuff/Griffin_Framingham/data/target_genes/', pattern = "recode.vcf")
+target_files<-list.files(path = '/work/larylab/Griffin_Stuff/Griffin_Framingham/data/TargetGenes/', pattern = "recode.vcf")
 target_genes <- gsub(".recode.vcf", "", target_files)
 ```
 
 ```{r}
-ADRB1 <- read.vcfR('/work/larylab/Griffin_Stuff/Griffin_Framingham/data/target_genes/ADRB1.recode.vcf')
+# Test using ADRB1
+ADRB1 <- read.vcfR('/work/larylab/Griffin_Stuff/Griffin_Framingham/data/TargetGenes/ADRB1_c1.recode.vcf')
 
 ADRB1@fix[,3] <- 1:length(ADRB1@fix[,3])
 ADRB1
@@ -30,7 +28,7 @@ tidy<- vcfR2tidy(ADRB1)
 ```
 
 ```{r}
-setwd('/work/larylab/Griffin_Stuff/Griffin_Framingham/data/target_genes/')
+setwd('/work/larylab/Griffin_Stuff/Griffin_Framingham/data/TargetGenes/')
 for (i in target_genes){
   print(i)
   gene = read.vcfR(paste(i, ".recode.vcf",sep = ""))
@@ -67,3 +65,4 @@ for (i in target_genes){
   save(tidy, file = paste(i,"_vcfr_tidy_filtered_genotype.RData",sep=""))
 }
 ```
+
