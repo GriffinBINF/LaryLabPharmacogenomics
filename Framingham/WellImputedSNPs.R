@@ -22,7 +22,7 @@ chrs8 <- chrs[chrs$Rsq > 0.8,]
 
 write.csv(chrs8, "/work/larylab/Griffin_Stuff/Griffin_Framingham/data/WellImputedSNPs08.csv", quote = F, row.names = F)
 
-chrs8<-read.csv("/work/larylab/Griffin_Stuff/Griffin_Framingham/data/WellImputedSNPs08.csv.csv")
+chrs8<-read.csv("/work/larylab/Griffin_Stuff/Griffin_Framingham/data/WellImputedSNPs08.csv")
 setwd("/work/larylab/Griffin_Stuff/Griffin_Framingham/data/")
 library(tidyr)
 chrs8 <- separate(data=chrs8, col = SNP, into = c("CHR", "POS"), sep = ":")
