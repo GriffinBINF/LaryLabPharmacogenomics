@@ -77,7 +77,7 @@ results_to_df <- function(lmer_result, index){
   effects <- as.data.frame(summary(lmer_result)$coefficients)  %>%
     rename(t = 't value') %>%
     rownames_to_column('var') %>%
-    filter(var == 'round(gt_DS):BBYes') %>%
+    #filter(var == 'round(gt_DS):BBYes') %>%
     
     # Manual p-value calculated from the t-statistic in lmer_result
     # A two tailed test with 1027 degrees of freedom.
@@ -124,7 +124,7 @@ results_lmer <- function(data, kmat, cov){
     # gt_DS = genotype variable (should be 0, 1, or 2 - imperfect imputation could lead to values in between)
     # FNperyear assumes working with femoral neck, for LS make sure to change
     lmer1 <- relmatLmer(formula = as.formula(paste0("FNperyear~round(gt_DS)*BB +", cov, '+ (1| Indiv)')), 
-                       data = data$data[[i]], relmat = list(Indiv = female_kmat))
+                       data = data$data[[i]], relmat = list(Indiv = kmat))
     new_results <- results_to_df(lmer1, i)
     results <- rbind(results, new_results)
     y<-Sys.time()
@@ -146,10 +146,16 @@ relevant_snps_results <- lmer_model %>%
   distinct()
 
 relevant_snps_emmeans <- lmer_model %>%
+  filter(var == 'round(gt_DS):BBYes') %>%
   select(-var, -Estimate, -'Std. Error', -t, -p)
 
-write.csv(relevant_snps_results, '/work/larylab/Griffin_Stuff/Griffin_Framingham/results/FULL_POWER_FN_AllSNPs_LMER_results_female.csv')
-write.csv(relevant_snps_emmeans, '/work/larylab/Griffin_Stuff/Griffin_Framingham/results/FULL_POWER_FN_AllSNPs_LMER_emmeans_female.csv')
+write.csv(relevant_snps_results, '/work/larylab/Griffin_Stuff/Griffin_Framingham/results/Long_FN_AllSNPs_LMER_results_female.csv')
+write.csv(relevant_snps_emmeans, '/work/larylab/Griffin_Stuff/Griffin_Framingham/results/Long_FN_AllSNPs_LMER_emmeans_female.csv')
 ```
 
-
+```{r}
+head(relevant_snps_results, n=20)
+```
+```{r}
+head(relevant_snps_emmeans)
+```
