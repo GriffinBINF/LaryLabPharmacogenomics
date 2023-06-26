@@ -12,7 +12,7 @@ library(gtsummary)
 ```
 
 ```{r}
-CS_Pheno <- read.csv('/work/larylab/Griffin_Stuff/Griffin_Framingham/data/Cross_Sectional_genoPhenoData.csv')
+CS_Pheno <- read.csv('/work/larylab/Griffin_Stuff/Griffin_Framingham/data/Cross_Sectional_FN_PhenoData.csv')
 
 # Filtered genotype files created from workflow described by K. Nevola
 genotype_files<- list.files(path = '/work/larylab/Griffin_Stuff/Griffin_Framingham/data/TargetGenes', 
@@ -31,6 +31,7 @@ for (i in genotype_files){
 }
 cs_all_genes_pheno <- merge(df, CS_Pheno, by.x = "Indiv", by.y = "shareid")
 ```
+
 ```{r}
 # Check data parameters
 # Number of unique SNPs (863)
@@ -44,16 +45,25 @@ length(unique(filter(cs_all_genes_pheno, SEX == 'Female')$Indiv))
 
 head(cs_all_genes_pheno)
 ```
+
+```{r}
+# Nest data
+cs_pheno_snp <- within(cs_all_genes_pheno, Genotype <- relevel(Genotype, ref = "normal"))
+cs_pheno_snp_pos<- cs_pheno_snp %>% group_by(.,POS,Gene) %>% nest()
+```
+
+
 ```{r}
 # If everything checks out, write to file. 
 # Full power designates both consent groups, CS cross sectional, and FN femoral neck
 save(cs_pheno_snp_pos, file = "/work/larylab/Griffin_Stuff/Griffin_Framingham/data/FULL_POWER_CS_FN_CandidateGenes.RData")
 ```
+
 ```{r}
 head(genoPheno)
 ```
+
 ```{r}
-# Obtain final cohort summart after merging with genotype data
 cohort <- cs_all_genes_pheno %>% filter(POS == 240243682, SEX == 'Female') 
 
 tbl_summary(cohort, include = c(BB, AGE8, BMI8, HGT8, EST8, f8cbnbmd))
