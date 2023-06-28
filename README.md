@@ -1,7 +1,8 @@
 **Mayo Pharmacogenomics Workflow 06/26/23**
 **G. Scott**
 
-![Alt text](image link)
+![Alt text](https://github.com/GriffinBINF/LaryLabPharmacogenomics/blob/main/plots/mayo_pharmacogenomics.png)
+
 **Required Files**
 
 **Framingham Phenotype Files**
