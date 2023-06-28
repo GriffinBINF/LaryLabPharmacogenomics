@@ -2,9 +2,9 @@
 **G. Scott**
 
 ![Alt text](https://github.com/GriffinBINF/LaryLabPharmacogenomics/blob/main/plots/mayo_pharmacogenomics.png)
-
 ![Alt text](https://github.com/GriffinBINF/LaryLabPharmacogenomics/blob/main/plots/long_fhs_plot.png)
 ![Alt text](https://github.com/GriffinBINF/LaryLabPharmacogenomics/blob/main/plots/cs_fhs_plot.png)
+
 **Required Files**
 
 **Framingham Phenotype Files**
