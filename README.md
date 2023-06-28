@@ -1,6 +1,8 @@
-# Mayo Pharmacogenomics Workflow
+**Mayo Pharmacogenomics Workflow 06/26/23**
 
-## Required Files
+**G. Scott**
+
+**Required Files**
 
 **Framingham Phenotype Files**
 
@@ -28,28 +30,48 @@ Pedigree - share\_ped\_052517.csv
 
 SNP Annotation Master List – mayo\_fram\_snp\_master\_list.csv
 
-## Mayo
+Results files from Dr. Beth Atkinson - HDAC\_dxa\_fit5.csv, imp\_dxa\_fit5.csv
 
-1. Clean Mayo Results
-  1. clean\_lab.Rmd, clean\_dxa.Rmd – DXA BMD and Serum lab results consist of imputed and non-imputed tables of slightly different formats. These two scripts repackage that data and assign consistent naming, position, and other identifying variables to SNPs.
+**Environment Management**
 
-**Output: cleaned\_dxa.csv, cleaned\_imputed\_dxa.csv,**
+The Framingham step 1.2 script create\_cand\_gene.R must be run from the command line as it relies on vcftools. The simplest way to account for this is to create a conda environment for this project and install vcftools.
 
-**cleaned\_lab.csv, cleaned\_imputed\_lab.csv**
+Follow the documentation [here](https://rc-docs.northeastern.edu/en/latest/software/conda.html) for installing miniconda. You should install miniconda in your work directory above your projects. Then you can initialize a conda environment and enter it using
 
-1. Merge Mayo Results By Drug, Identify Mayo SNPs
-  1. merge\_mayo\_data\_id\_snps.Rmd – Merge imputed and non-imputed results, arrange results by treatment group, identify SNPs used in mayo results (23 across _ADRB1, ADRB2, HDAC4_.
+$conda activate [env name]
 
-**Output: all\_mayo\_BMD.csv, all\_mayo\_LAB.csv, all\_mayo\_SNPs.csv**
+and install your desired libraries using
 
-## Framingham
+$conda install [packagename]
 
-1. Follow K. Nevola's Workflow - (Code adapted into Rmarkdown files and to run on Discovery)
-  1. WellImputedSNPs.R – Create a list of SNPs that meet the imputation threshold (modified for Discovery server)
+Next, install R using
+
+conda install -c r r
+conda install -c "r/label/archive" r
+
+Next, install r-essentials which is a set of core R packages including dplyr used in this script.
+
+conda install -c r r-essentials
+
+Alternatively you can install just dplyr if you are confident that you wont be using this env for any other work in R.
+
+conda install -c conda-forge r-dplyr
+
+Finally, install vcftools using one of the following.
+
+conda install -c bioconda vcftools
+conda install -c "bioconda/label/cf201901" vcftools
+
+Verify that you have vcftools installed correctly by running vcftools in the command line.
+
+Framingham
+
+1. Preprocessing Genotype Data
+  1. WellImputedSNPs.Rmd – Create a list of SNPs that meet the imputation threshold (modified for Discovery server)
 
 **Output: WellImputedSNPs.txt**
 
-  1. create\_cand\_gene.Rmd – Create a vcf file for each gene region.
+  1. create\_cand\_gene.R – Create a vcf file for each gene region. **Run using the running\_create\_cand\_gene\_vcf.sh script from command line after following vcftools install steps.**
     1. Filters for 2KB upstream to 0.5KB downstream.
     2. Filters for well imputed SNPs.
     3. Filters for individuals with phenotype data \* idealized for vcf.gz files.
@@ -59,29 +81,56 @@ SNP Annotation Master List – mayo\_fram\_snp\_master\_list.csv
     3. Filter for minor allele frequency \> 0.05
     4. Convert genotype to normal, heterozygous, or homozygous alternative.
     5. Write to Rdata format.
-1. Adapted K. Nevola's Workflow for Longitudinal Data
+1. Build Genotype-Phenotype Files
   1. build\_longitudinal\_phenotype\_files.Rmd – create files consisting of phenotype data for femoral neck and lumbar spine longitudinal data.
+  2. build\_cross\_sectional\_phenotype\_files.Rmd – as above but for cross sectional
 
-**Output** : **Femoral\_Neck\_Pheno\_Data.csv**
+**Output** : **[groups]\_[bone site]\_[study]\_Pheno\_Data.csv**
 
-  1. build\_genotype\_phenotype\_file.Rmd – Merge genes and phenotype data into one file.
+  1. build\_genoPheno\_longitudinalRmd – Merge genes and phenotype data into one file.
+  2. build\_genoPheno\_cross\_sectional.Rmd – as above but for cross sectional
 
-**Output** : **CandidateGenes.Rdata**
+**Output** : […] **CandidateGenes.Rdata**
 
-1. Run relational matrix LMER
-  1. run\_lmer.Rmd – Fit LMER model for longitudinal or cross-sectional data.
+1. Fit Model
+  1. run\_lmer\_longitudinal.Rmd – Fit LMER model for longitudinal or cross-sectional data.
+  2. run\_lmer\_cross\_sectional.Rmd – cross sectional fit. **If you encounter the error an error of the form "could not extract variance" check the package dependencies for emmeans. You might be missing one of the required packages so it is best to make sure.**
 
-## Plotting and Visualization
+**Output: […]AllSNPs\_LMER\_results\_female.csv**
 
-1. Merge Mayo with Framingham, make Flextables.
-  1. build\_merged\_mayo\_fram\_tables.Rmd – Rework Framingham headers to match mayo, merge results, create tables of significant results as .csv and .docx flextable.
+**[…]AllSNPs\_LMER\_emmeans\_female.csv**
 
-**Output: all\_dxa\_ctx\_flex.csv, filtered\_dxa\_plus\_ctx\_flex.csv, cross\_sectional\_flex.csv**
+Mayo
+
+1. Clean Mayo Results
+  1. clean\_lab.Rmd, clean\_dxa.Rmd – DXA BMD and Serum lab results consist of imputed and non-imputed tables of slightly different formats. These two scripts repackage that data and assign consistent naming, position, and other identifying variables to SNPs.
+
+**Output: cleaned\_dxa.csv, cleaned\_imputed\_dxa.csv**
+
+**cleaned\_lab.csv, cleaned\_imputed\_lab.csv**
+
+1. Merge Mayo Results By Drug, Identify Mayo SNPs
+  1. merge\_mayo\_data\_id\_snps.Rmd – Merge imputed and non-imputed results, arrange results by treatment group, identify SNPs used in mayo results (23 across _ADRB1, ADRB2, HDAC4_.
+
+**Output: all\_mayo\_BMD.csv**
+
+**all\_mayo\_LAB.csv**
+
+**all\_mayo\_SNPs.csv**
+
+1. Preprocess Mayo Data
+  1. pre\_process\_mayo\_data.Rmd – Process Mayo data such that each and bone site is labeled separately for easier filtering later on. Flip signs of non-imputed effect estimates so that they match the allele being measured in the imputed effect estimates. Then flip all of them so that they match the Framingham results. This is because Mayo is measuring the interaction effect from reference allele dose whereas Framingham is counting alternate alleles.
+
+**Output: processedBMD.csv**
+
+**processedLAB.csv**
+
+Plotting and Visualization
 
 1. Plot Effect Estimates
-  1. build\_effect\_estimate\_plot.Rmd
+  1. plot\_mayo\_and\_fhsRmd
 
-**Output: [Default] All Significant BMD Plus CTX .png**
+**Output: None**
 
-1. Plot Estimated Marginal Means (EMmeans)
+1. Plot Estimated Marginal Means (EMmeans) (Currently unused)
   1. build\_emmeans\_plots\_v2.Rmd
