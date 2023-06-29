@@ -50,7 +50,7 @@ cleaned_dxa <- dxa %>%
   merge(lookup, by = 'rsid', all = T) %>%
   filter(!is.na(Sample)) %>%
   distinct() %>%
-  select(-written.allele, -A1, -A2, -rsid.allele, -ch38.reference.allele, -ch38.alternate.allele) %>%
+  select(-written.allele, -A1, -A2, -rsid.allele, -ch38.reference.allele, -ch38.alternate.allele, -X) %>%
   
   mutate(Chromosome = as.numeric(gsub('chr', '', Chromosome)))
 
@@ -89,3 +89,4 @@ cleaned_imp
 write.csv(cleaned_dxa,'/work/larylab/Griffin_Stuff/Griffin_Mayo/data/cleaned_dxa.csv')
 write.csv(cleaned_imp,'/work/larylab/Griffin_Stuff/Griffin_Mayo/data/cleaned_imputed_dxa.csv')
 ```
+
