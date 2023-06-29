@@ -1,0 +1,163 @@
+---
+title: "Mayo Recoding"
+author: "Griffin Tibbitts"
+date: '2023-06-27'
+output: html_document
+---
+```{r}
+rm(list = ls())
+```
+
+```{r}
+library(dplyr)
+```
+
+```{r}
+# Lab BMD sample results
+dxa <- read.csv('/work/larylab/Griffin_Stuff/Griffin_Mayo/data/cleaned_dxa.csv')
+
+# Imputed BMD sample results
+imp <- read.csv('/work/larylab/Griffin_Stuff/Griffin_Mayo/data/cleaned_imputed_dxa.csv')
+
+# Remove EMmeans standard errors, they are used by other scripts
+imp <- imp %>%
+  select(-matches('.*pred_se'))
+
+# Lab bone turnover marker results from blood
+lab <- read.csv('/work/larylab/Griffin_Stuff/Griffin_Mayo/data/cleaned_lab.csv')
+
+# Imputed bone turnover marker results from blood
+ilab <- read.csv('/work/larylab/Griffin_Stuff/Griffin_Mayo/data/cleaned_imputed_lab.csv')
+
+# Remove EMmeans standard errors, they are used by other scripts
+ilab <- ilab %>%
+  select(-matches('.*pred_se'))
+
+# Merge imputed and non-imputed data.
+# This step is done here because the imputed files are used to create 
+# EMmeans plots by another script
+all_dxa_merged <- rbind(dxa, imp)
+all_lab_merged <- rbind(lab, ilab)
+
+head(all_dxa_merged)
+head(all_lab_merged)
+```
+
+
+```{r}
+parse_data_by_drug <- function(df_in, effect_estimate, standard_error, p_val, Drug_Name, Baseline) {
+  
+    # Calculate bounds of confidence intervals
+  df_in %>%
+    
+    # filter for p_values significant to the specified drug and rename generic p_value column to 'p_value' and round p_value to three decimal places
+    mutate(p_value = df_in[[p_val]]) %>% mutate(p_value = round(p_value, 3)) %>%
+    
+    rename('Baseline' = Baseline, 'Value' = effect_estimate, 'Std.Error' = standard_error, 'p' = p_value) %>%
+
+    # Make sure positions are in numeric terms.
+    # Added gsub to remove hidden non-numeric characters from ch38
+    mutate(ch38 = sub('.*:', '', ch38)) %>%
+    mutate(ch37 = as.numeric(ch37), ch38 = as.numeric(gsub("[^0-9.-]", "", ch38))) %>%
+
+    # Add column specifying the significant drug for merge
+    mutate(Drug = Drug_Name) %>%
+    
+    mutate(Value = Value/Baseline) %>%
+    
+    # After the values are aligned in the following steps, the allele counted will be the alternate allele for each snp
+    mutate(Allele = ch38.alternate.allele) %>%
+    
+    select(N, SNP, ch37, Chromosome, Gene, REF, Allele, one_of('BMD_Site', 'Lab'), Drug, Value, Std.Error, p, Source)
+}
+# Separate BMD data by drug for which the effect was significant
+atenolol <- parse_data_by_drug(all_dxa_merged, 'SNP_AvsPl_coef', 'SNP_AvsPl_se', 'SNP_AvsPl_pval', 'Atenolol', 'Mean_BMD0')
+nebivolol <- parse_data_by_drug(all_dxa_merged, 'SNP_NvsPl_coef', 'SNP_NvsPl_se', 'SNP_NvsPl_pval', 'Nebivolol', 'Mean_BMD0')
+propranolol_40 <- parse_data_by_drug(all_dxa_merged, 'SNP_P40vsPl_coef', 'SNP_P40vsPl_se', 'SNP_P40vsPl_pval', 'Propranolol40', 'Mean_BMD0')
+propranolol_80 <- parse_data_by_drug(all_dxa_merged, 'SNP_P80vsPl_coef', 'SNP_P80vsPl_se', 'SNP_P80vsPl_pval', 'Propranolol80', 'Mean_BMD0')
+
+# Separate Lab data by drug for which the effect was significant
+atenolol_lab <- parse_data_by_drug(all_lab_merged, 'SNP_AvsPl_coef', 'SNP_AvsPl_se', 'SNP_AvsPl_pval', 'Atenolol', 'Mean_Lab0')
+nebivolol_lab <- parse_data_by_drug(all_lab_merged, 'SNP_NvsPl_coef', 'SNP_NvsPl_se', 'SNP_NvsPl_pval', 'Nebivolol', 'Mean_Lab0')
+propranolol_40_lab <- parse_data_by_drug(all_lab_merged, 'SNP_P40vsPl_coef', 'SNP_P40vsPl_se', 'SNP_P40vsPl_pval', 'Propranolol40', 'Mean_Lab0')
+propranolol_80_lab <- parse_data_by_drug(all_lab_merged, 'SNP_P80vsPl_coef', 'SNP_P80vsPl_se', 'SNP_P80vsPl_pval', 'Propranolol80', 'Mean_Lab0')
+
+# Re-merge into large data frames containing only results that were significant and the drug they
+# were significant for.
+dxa_by_drug <- bind_rows(atenolol, nebivolol, propranolol_40, propranolol_80)
+lab_by_drug <- bind_rows(atenolol_lab, nebivolol_lab, propranolol_40_lab, propranolol_80_lab)
+
+head(dxa_by_drug)
+head(lab_by_drug)
+```
+```{r}
+# Certain snps from the non-imputed data use the opposite reference
+# vs alternate allele from the imputed data. Manually changing the signs 
+# for these snps aligns non-imputed with imputed results so that the alleles
+# being counted are consistent for all snps
+
+change_non_matches_dxa <- function(df_in){
+  df_in %>% mutate(Value = case_when(SNP == "rs1042713" & Source == 'dxa' ~ as.numeric(Value) * -1,
+                                     SNP == "rs1042717" & Source == 'dxa' ~ as.numeric(Value) * -1,
+                                     SNP == "rs1042718" & Source == 'dxa' ~ as.numeric(Value) * -1,
+                                     SNP == "rs1042719" & Source == 'dxa' ~ as.numeric(Value) * -1,
+                                     SNP == "rs2050395" & Source == 'dxa' ~ as.numeric(Value) * -1,
+                                     SNP == "rs12654778" & Source == 'dxa' ~ as.numeric(Value) * -1,
+                                     SNP == "rs1801253" & Source == 'lab' ~ as.numeric(Value) * -1,
+                                     TRUE ~ Value)) %>%
+    arrange(SNP)
+}
+
+# Removed code changing lab results. 
+# When run, this just keeps all of the lab results the same.
+# This is because earlier it was assumed that all of the non-imputed data 
+# had flipped signs but this is not the case. It is now clear that only 
+# BMD non-imputed measurements have this issue and needed to be flipped.
+change_non_matches_lab <- function(df_in){
+  df_in %>% mutate(Value = case_when(#SNP == "rs1042713" & Source == 'lab' ~ as.numeric(Value) * -1,
+                                     # SNP == "rs1042717" & Source == 'lab' ~ as.numeric(Value) * -1,
+                                     # SNP == "rs1042718" & Source == 'lab' ~ as.numeric(Value) * -1,
+                                     # SNP == "rs1042719" & Source == 'lab' ~ as.numeric(Value) * -1,
+                                     # SNP == "rs2050395" & Source == 'lab' ~ as.numeric(Value) * -1,
+                                     # SNP == "rs12654778" & Source == 'lab' ~ as.numeric(Value) * -1,
+                                     # SNP == "rs1801253" & Source == 'lab' ~ as.numeric(Value) * -1,
+                                     TRUE ~ Value)) %>%
+    arrange(SNP)
+}
+
+matches_dxa <- change_non_matches_dxa(dxa_by_drug) 
+matches_lab <- change_non_matches_lab(lab_by_drug) 
+
+head(matches_dxa)
+head(matches_lab)
+```
+
+```{r}
+# Now that the imputed and non-imputed data from Mayo is aligned,
+# it needs one more sign change to ensure that the counted alleles are the same
+# as Framingham. The Mayo data set is counting the number of reference alleles
+# whereas Framingham is counting alternate alleles. Flipping the sign for Mayo
+# gives the effect estimate of the change for each copy of the alternate allele.
+aligned_mayo_and_framingham_dxa <- matches_dxa %>%
+  mutate(Value = case_when(Source == 'dxa' | Source == 'Imputed' ~ Value * -1,
+                           TRUE ~ Value)) %>%
+  mutate(Value = round(Value, 3), Std.Error = round(Std.Error, 3), p = round(p,6)) %>%
+  select(N, SNP, ch37, Chromosome, Gene, REF, Allele, one_of('BMD_Site', 'Lab'), Drug, Value, Std.Error, p, Source)
+aligned_mayo_and_framingham_dxa <-  aligned_mayo_and_framingham_dxa[!duplicated(aligned_mayo_and_framingham_dxa[c('ch37', 'Drug', 'BMD_Site')]),]
+
+aligned_mayo_and_framingham_lab <- matches_lab %>%
+  mutate(Value = case_when(Source == 'dxa' | Source == 'Imputed' ~ Value * -1,
+                           TRUE ~ Value)) %>%
+  mutate(Value = round(Value, 3), Std.Error = round(Std.Error, 3), p = round(p,6)) %>%
+  select(N, SNP, ch37, Chromosome, Gene, REF, Allele, one_of('BMD_Site', 'Lab'), Drug, Value, Std.Error, p, Source) 
+
+aligned_mayo_and_framingham_lab <- aligned_mayo_and_framingham_lab[!duplicated(aligned_mayo_and_framingham_lab[c('ch37', 'Drug', 'Lab')]),]
+
+head(aligned_mayo_and_framingham_dxa)
+head(aligned_mayo_and_framingham_lab)
+```
+```{r}
+# Write intermediate files
+write.csv(aligned_mayo_and_framingham_dxa, '/work/larylab/Griffin_Stuff/Griffin_Mayo/data/processedBMD.csv')
+write.csv(aligned_mayo_and_framingham_lab, '/work/larylab/Griffin_Stuff/Griffin_Mayo/data/processedLAB.csv')
+```
