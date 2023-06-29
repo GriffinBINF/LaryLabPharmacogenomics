@@ -12,82 +12,80 @@ rm(list = ls())
 
 ```{r}
 library(dplyr)
+library(stringr)
+library(tidyr)
 ```
 
 ```{r}
 # Load in dxa file
 dxa = read.csv(file="/work/larylab/Mayo/data/HDAC_dxa_fit5.csv",stringsAsFactors = F)
 idxa = read.csv(file="/work/larylab/Mayo/data/imp_dxa_fit5.csv",stringsAsFactors = F)
-lookup = read.csv('/work/larylab/Griffin_Stuff/Griffin_Mayo/data/mayo_fram_snp_master_list.csv')
+lookup = read.csv('/work/larylab/Griffin_Stuff/Griffin_Mayo/data/mayo_fram_snp_master_list.csv') %>%
+  separate(ch38, c('Chromosome', 'ch38'))
+head(dxa)
 ```
-
 ```{r}
-# Clean and assign human readable values to data from HDAC_dxa_fit5.csv 
 cleaned_dxa <- dxa %>%
   
-  # Rename column names to be more human readable
-  rename(BMD_Site = 'dxa_var', 'SNP'='snp') %>%
+  # Deal with GSA label
+  mutate(snp = case_when(startsWith(snp, 'GSA') ~ gsub('GSA.', '', snp),
+                         TRUE ~ snp)) %>%
   
-  # Create new column for the variant nucleotide
-  mutate(REF = sub(".*_", '', SNP), .after = SNP,
-         ALT = NA) %>%
+  # Split snp into rsid and effect allele columns
+  separate(snp, c('rsid', 'EA')) %>%
+
   
-  # Remove nucleotide from the SNP ID to standardize them for grouping
-  mutate(SNP = sub("_.*", "", SNP)) %>%
-  
-  # Remove GSA. from the rsIDs it shows up in
-  mutate(SNP = sub(".*GSA.", "", SNP)) %>%
-  
-  # Renaming BMD Sites to be more descriptive
-  mutate(BMD_Site = recode(BMD_Site, bodybmd = 'Total Body', fnbmd = 'Femoral Neck',
+  # Rename BMD Sites to be more descriptive
+  rename(Sample = dxa_var) %>%
+  mutate(Sample = recode(Sample, bodybmd = 'Total Body', fnbmd = 'Femoral Neck',
                            fhipbmd = 'Femoral Hip', sl1l4bmd = 'Lumbar Spine', 
-                           drubmd = 'Ultradistal Radius', dradbmd = 'Distal Radius')) %>%
+                           drubmd = 'Ultradistal Radius', dradbmd = 'Distal Radius'),
+         
+         # Non-effect allele is not listed here so rather than assuming leave it
+         # as NA
+         NEA = NA,
+         Source = 'dxa') %>%
   
-  # Merge with lookup file
-  merge(lookup, by.x = 'SNP', by.y = 'rsid', all = T) %>%
-  filter(!is.na(BMD_Site)) %>%
+  # Merge with lookup file to get positions
+  merge(lookup, by = 'rsid', all = T) %>%
+  filter(!is.na(Sample)) %>%
   distinct() %>%
-  select(-written.allele, -A1, -A2, -rsid.allele) %>%
+  select(-written.allele, -A1, -A2, -rsid.allele, -ch38.reference.allele, -ch38.alternate.allele) %>%
   
-  # Remove lookup chr number from ch38 position
-  mutate(ch38 = sub('.*:','',ch38)) %>%
-  
-  # Label with source
-  mutate(Source = 'dxa')
+  mutate(Chromosome = as.numeric(gsub('chr', '', Chromosome)))
+
+cleaned_dxa
 ```
 
 ```{r}
-# big cleaning and human readable name assignment for the imputed data
 cleaned_imp <- idxa %>%
-
+    
     # Rename column names to be more human readable
-    rename(BMD_Site = 'dxa_var', 'SNP'='snp') %>%
+    rename(Sample = 'dxa_var') %>%
+    
+    # Separate snp naming convention into separate columns
+    separate(snp, c('Chromosome','ch38', 'EA', 'NEA')) %>%
+    
+    # Remove 'chr' from chromosome to match non-imputed and to be integer
+    mutate(Chromosome = as.numeric(gsub('chr', '', Chromosome))) %>%
   
     # Renaming BMD Sites to be more descriptive
-    mutate(BMD_Site = recode(BMD_Site, bodybmd = 'Total Body', fnbmd = 'Femoral Neck',
+    mutate(Sample = recode(Sample, bodybmd = 'Total Body', fnbmd = 'Femoral Neck',
                            fhipbmd = 'Femoral Hip', sl1l4bmd = 'Lumbar Spine', 
                            drubmd = 'Ultradistal Radius', dradbmd = 'Distal Radius')) %>%
+
   
-  # Fix SNP name 
-   mutate(ch38 = paste0(sub("\\..*",'',SNP), ':', gsub("^.+?\\.(.+?)\\..*$", "\\1", SNP))) %>%
-  
-  # Merge with lookup
-  merge(lookup, by = 'ch38', all = T) %>%
-  filter(!is.na(BMD_Site)) %>%
-  distinct() %>%
-  select(-written.allele, -rsid.allele) %>%
-  rename(REF = A2, ALT = A1) %>%
-  
-  # Remove old SNP column, rename rsid to SNP
-  select(-SNP) %>%
-  rename(SNP = rsid) %>%
-  
-  # Add source label
-  mutate(Source = 'Imputed')
+  # Merge with lookup file to get ch37 position and rsid
+    merge(lookup, by = c('ch38', 'Chromosome'), all = T) %>%
+    filter(!is.na(Sample)) %>%
+    distinct() %>%
+    select(-written.allele, -rsid.allele, -A1, -A2, -ch38.reference.allele, -ch38.alternate.allele, -X) %>%
+    mutate(Source = 'imputed dxa')
+
+cleaned_imp
 ```
 
 ```{r}
 write.csv(cleaned_dxa,'/work/larylab/Griffin_Stuff/Griffin_Mayo/data/cleaned_dxa.csv')
 write.csv(cleaned_imp,'/work/larylab/Griffin_Stuff/Griffin_Mayo/data/cleaned_imputed_dxa.csv')
 ```
-
