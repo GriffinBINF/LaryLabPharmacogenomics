@@ -21,7 +21,8 @@ library(tidyr)
 dxa = read.csv(file="/work/larylab/Mayo/data/HDAC_dxa_fit5.csv",stringsAsFactors = F)
 idxa = read.csv(file="/work/larylab/Mayo/data/imp_dxa_fit5.csv",stringsAsFactors = F)
 lookup = read.csv('/work/larylab/Griffin_Stuff/Griffin_Mayo/data/mayo_fram_snp_master_list.csv') %>%
-  separate(ch38, c('Chromosome', 'ch38'))
+  separate(ch38, c('Chromosome', 'ch38')) %>%
+  mutate(Chromosome = as.numeric(substring(Chromosome, 4)))
 head(dxa)
 ```
 ```{r}
