@@ -23,8 +23,8 @@ mayo_emmeans <- read.csv('/work/larylab/Griffin_Stuff/Griffin_Mayo/data/cleaned_
 mayo_snps <- read.csv('/work/larylab/Griffin_Stuff/Griffin_Mayo/results/mayo_snps_list.csv')
 
 # From runLMER.Rmd
-long_fram <- read.csv('/work/larylab/Griffin_Stuff/Griffin_Framingham/results/AllSNPs_LMER_emmeans_female.csv')
-cs_fram <- read.csv('/work/larylab/Griffin_Stuff/Griffin_Framingham/results/cs_AllSNPs_LMER_emmeans_female.csv')
+long_fram <- read.csv('/work/larylab/Griffin_Stuff/Griffin_Framingham/results/Long_FN_AllSNPs_LMER_emmeans_female.csv')
+cs_fram <- read.csv('/work/larylab/Griffin_Stuff/Griffin_Framingham/results/FULL_POWER_CS_FN_AllSNPs_LMER_emmeans_female.csv')
 ```
 
 ```{r}
@@ -42,11 +42,6 @@ parse_data_by_drug <- function(df_in, effect_estimate, standard_error, p_val, Dr
     
     rename('Baseline' = Mean_BMD0, 'Value' = effect_estimate, 'Std.Error' = standard_error, 'p' = p_value) %>%
     
-    #mutate(Value = (Value/Baseline) * 100, Std.Error = (Std.Error/Baseline) * 100) %>%
-  
-    # Select relevant columns for the specified drug
-    #select(SNP, Gene, ch37, ch38, BMD_Site, Value, Std.Error, p, Source, REF, ALT) %>%
-    
     # Make sure positions are in numeric terms.
     # Added gsub to remove hidden non-numeric characters from ch38
     mutate(ch38 = sub('.*:', '', ch38)) %>%
@@ -54,7 +49,7 @@ parse_data_by_drug <- function(df_in, effect_estimate, standard_error, p_val, Dr
 
     
     # Add column specifying the significant drug for merge
-    mutate(Drug = Drug_Name, .before = BMD_Site) 
+    mutate(Drug = Drug_Name, .before = Sample) 
     
     
 }
@@ -72,20 +67,20 @@ prebuild_means <- filter_for_significance%>%
   
   # select out the predicted emmeans for each copy of the alternate allele
   select(-matches('se')) %>%
-  select(SNP, BMD_Site, matches('pred'), matches('pred_se'), Source, Gene, REF, ALT)%>%
+  select(rsid, Sample, matches('pred'), matches('pred_se'), Source, Gene, EA, NEA)%>%
   
-  # Long to wide, put data in terms of SNP 
-  gather(name, EMmean, -SNP, -BMD_Site, -Source, -Gene, -REF, -ALT) %>%
-    arrange(SNP)
+  # Long to wide, put data in terms of rsid 
+  gather(name, EMmean, -rsid, -Sample, -Source, -Gene, -EA, -NEA) %>%
+    arrange(rsid)
 
 prebuild_se <- filter_for_significance%>%
   
   # select out the predicted emmeans for each copy of the alternate allele
-  select(SNP, BMD_Site, matches('pred_se'), matches('pred_se'), Source, Gene, REF, ALT)%>%
+  select(rsid, Sample, matches('pred_se'), matches('pred_se'), Source, Gene, EA, NEA)%>%
   
-  # Long to wide, put data in terms of SNP 
-  gather(name, Std.Error, -SNP, -BMD_Site, -Source, -Gene, -REF, -ALT) %>%
-    arrange(SNP) %>%
+  # Long to wide, put data in terms of rsid 
+  gather(name, Std.Error, -rsid, -Sample, -Source, -Gene, -EA, -NEA) %>%
+    arrange(rsid) %>%
   mutate(name = gsub('*.se','',name))
 
 prebuild <- merge(prebuild_means, prebuild_se) %>%
@@ -102,36 +97,30 @@ prebuild <- merge(prebuild_means, prebuild_se) %>%
                                 startsWith(name, 'P40') ~ 'Propranolol 40',
                                 startsWith(name, 'P80') ~ 'Propranolol 80')) %>%
   
-  mutate(SNP = case_when(startsWith(SNP, 'rs11124190') ~ 'rs11124190',
-                         startsWith(SNP, 'rs1336315111') ~ 'rs1336315111',
-                         TRUE ~ SNP)) %>%
+  mutate(rsid = case_when(startsWith(rsid, 'rs11124190') ~ 'rs11124190',
+                         startsWith(rsid, 'rs1336315111') ~ 'rs1336315111',
+                         TRUE ~ rsid)) %>%
   
-  # ASSUMES MAYO DATA COUNTS REFERENCE ALLELES, remove this and change
-  # labels if Beth says otherwise.
-  # Change data to effectively count the number of copies of the alternate
-  # allele to better match framingham data.
-  
-  mutate(Allele = case_when(Allele == '2' ~ 0,
-                            Allele == '0' ~ 2,
-                            Allele == '1' ~ 1))
+  # ASSUMES MAYO DATA COUNTS REFERENCE ALLELES
+  unique()
   
 prebuild
 ```  
 
 
 ```{r}
-make_plots <- function(emmeans_data, bmd_site_list) {
+make_plots <- function(emmeans_data, Sample_list) {
   
-  for(i in 1:length(bmd_site_list)) {
-    print(bmd_site_list[[i]])
+  for(i in 1:length(Sample_list)) {
+    print(Sample_list[[i]])
     filtered_df <- emmeans_data %>%
-      filter(BMD_Site == bmd_site_list[[i]])
+      filter(Sample == Sample_list[[i]])
     
     
-    for(j in 1:length(unique(filtered_df$SNP))) {
-      print(unique(filtered_df$SNP)[[j]])
+    for(j in 1:length(unique(filtered_df$rsid))) {
+      print(unique(filtered_df$rsid)[[j]])
       plot_interaction_effects <- filtered_df %>%
-        filter(SNP == unique(filtered_df$SNP)[[j]])
+        filter(rsid == unique(filtered_df$rsid)[[j]])
       
       # Make Plot
        p <-  ggplot(data = plot_interaction_effects, aes(fill = drug_var, x = Allele, y = EMmean)) +
@@ -143,12 +132,12 @@ make_plots <- function(emmeans_data, bmd_site_list) {
                  show.legend = F) +
         scale_fill_manual(values = c('Placebo' = 'grey','Atenolol' = 'light blue', 'Nebivolol' = 'blue', 'Propranolol 40' = 'light green', 'Propranolol 80' = 'dark green')) +
        labs(title = paste(plot_interaction_effects$Gene[[1]], 
-                          paste0(plot_interaction_effects$SNP[[1]],'_', plot_interaction_effects$ALT[[1]]),
-                          plot_interaction_effects$BMD_Site[[1]], '(Imputed)'),
+                          paste0(plot_interaction_effects$rsid[[1]],'_', plot_interaction_effects$EA[[1]]),
+                          plot_interaction_effects$Sample[[1]], '(Imputed)'),
             x="Number of Copies (Imputed)", y="% Change", fill="Treatment") 
       
         #print(p) 
-        ggsave(ggsave(paste0(unique(filtered_df$SNP)[[j]],'_imp_',plot_interaction_effects$BMD_Site[[1]],'.png'),
+        ggsave(ggsave(paste0(unique(filtered_df$rsid)[[j]],'_imp_',plot_interaction_effects$Sample[[1]],'.png'),
         plot = p,
         device = png,
         path = '/work/larylab/Griffin_Stuff/Griffin_Mayo/results/plots/'))
@@ -183,7 +172,7 @@ long_framingham_emmeans_plot <- function(matched_mayo_snps, title, y_variable, s
         plot_interaction_effects <- matched_mayo_snps %>%
            filter(SNP == unique(matched_mayo_snps$SNP)[[j]])
          
-          p <-  ggplot(data = plot_interaction_effects, aes(fill = BB6, x = Allele.y, y = emmean)) +
+          p <-  ggplot(data = plot_interaction_effects, aes(fill = BB, x = Allele.y, y = emmean)) +
           geom_col(position = 'dodge', color = 'black') +
           scale_y_continuous(labels = scales::percent) +
         geom_errorbar(aes(ymin = lower.CL, ymax = upper.CL),
