@@ -130,10 +130,15 @@ Mayo
 
 Plotting and Visualization
 
-1. Plot Effect Estimates
-  1. plot\_mayo\_and\_fhsRmd
+1. build\_tables.Rmd - Build tables consisting of significant non-duplicate Mayo hits and their respective FHS results
+  **Output: adrb1\_results\_table.csv, adrb2\_results\_table.csv, hdac4\_results\_table.csv**
+  **Includes code for making flextables but was not able to finish code to write to docx before end of co-op**
 
+2. Plot Effect Estimates
+  2. plot\_mayo\_and\_fhsRmd
+     
 **Output: None**
 
-1. Plot Estimated Marginal Means (EMmeans) (Currently unused)
-  1. build\_emmeans\_plots\_v2.Rmd
+3. Plot Estimated Marginal Means (EMmeans) (Currently unused)
+  3. build\_emmeans\_plots\_v2.Rmd
+  **Output: All plots are output to /work/larylab/Griffin_Stuff/Griffin_Mayo/results/plots**
